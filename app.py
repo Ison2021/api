@@ -1,39 +1,46 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from ultralytics import YOLO
-import os
-from PIL import Image
-import io
+import torch
+import cv2
+import numpy as np
+from yolov5 import YOLOv5  # YOLOv5 package import
 
 app = Flask(__name__)
 CORS(app)
 
-# Load YOLO model
-model = YOLO("best.pt")  # make sure best.pt is in the same folder
+# Load your YOLOv5 model (CPU or GPU if available)
+yolo = YOLOv5("best.pt", device="cpu")  # use "cuda" if GPU available
 
 @app.route("/")
-def home():
-    return "YOLO API is running!"
+def index():
+    return "YOLOv5 API is running!"
 
-@app.route("/detect", methods=["POST"])
-def detect():
+@app.route("/predict", methods=["POST"])
+def predict():
     if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
+        return jsonify({"error": "No image file provided"}), 400
 
     file = request.files["image"]
-    img = Image.open(io.BytesIO(file.read()))
+    img_bytes = file.read()
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    results = model.predict(img)
+    # Run YOLOv5 prediction
+    results = yolo.predict(img)
 
+    # Convert results to JSON
     detections = []
-    for r in results:
-        for box in r.boxes:
-            cls = int(box.cls[0])
-            conf = float(box.conf[0])
-            name = model.names[cls]
-            detections.append({
-                "label": name,
-                "confidence": round(conf, 3)
-            })
+    for r in results.xyxy[0]:
+        detections.append({
+            "xmin": float(r[0]),
+            "ymin": float(r[1]),
+            "xmax": float(r[2]),
+            "ymax": float(r[3]),
+            "confidence": float(r[4]),
+            "class": int(r[5])
+        })
 
     return jsonify({"detections": detections})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
