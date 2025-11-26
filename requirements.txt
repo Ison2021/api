@@ -7,4 +7,3 @@ pandas
 pillow
 requests
 gunicorn
-git+https://github.com/ultralytics/yolov5.git  # installs YOLOv5 package directly
