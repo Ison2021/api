@@ -1,7 +1,9 @@
+gunicorn
 flask
 torch
 opencv-python-headless
 pillow
 numpy
 pandas
+
 requests
