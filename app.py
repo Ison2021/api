@@ -1,18 +1,32 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import torch
 import cv2
 import numpy as np
-from ultralytics import YOLO
+import sys
+import os
+
+# Add local YOLOv5 repo (must exist in your GitHub project!)
+sys.path.append(os.path.join(os.path.dirname(__file__), "yolov5"))
+
+from models.common import DetectMultiBackend
+from utils.torch_utils import select_device
+from utils.general import non_max_suppression, scale_coords, letterbox
 
 app = Flask(__name__)
 CORS(app)
 
-# Load YOLOv5 model converted to YOLOv8 format (pt still works)
-model = YOLO("best.pt")
+# CPU only for Render
+device = select_device("cpu")
+
+# Load YOLOv5 model
+model = DetectMultiBackend("best.pt", device=device)
+stride = model.stride
+names = model.names
 
 @app.route("/")
 def home():
-    return "YOLO API running!"
+    return "YOLOv5 API running on Render!"
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -21,28 +35,43 @@ def predict():
 
     file = request.files["image"]
     img_bytes = file.read()
+
+    # Convert image
     npimg = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    img0 = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    # Run prediction
-    results = model.predict(img, conf=0.25)
+    # Preprocess (important!)
+    img = letterbox(img0, 640, stride=stride)[0]
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR→RGB, HWC→CHW
+    img = np.ascontiguousarray(img)
 
-    detections = []
-    for r in results:
-        for box in r.boxes:
-            detections.append({
-                "xmin": float(box.xyxy[0][0]),
-                "ymin": float(box.xyxy[0][1]),
-                "xmax": float(box.xyxy[0][2]),
-                "ymax": float(box.xyxy[0][3]),
-                "confidence": float(box.conf[0]),
-                "class_id": int(box.cls[0]),
-                "class_name": model.names[int(box.cls[0])]
-            })
+    img_tensor = torch.from_numpy(img).to(device)
+    img_tensor = img_tensor.float() / 255.0
+    img_tensor = img_tensor.unsqueeze(0)
 
-    return jsonify({"detections": detections})
+    # Inference
+    pred = model(img_tensor, augment=False, visualize=False)
+    pred = non_max_suppression(pred, 0.25, 0.45)
+
+    results = []
+
+    for det in pred:
+        if len(det):
+            det[:, :4] = scale_coords(img_tensor.shape[2:], det[:, :4], img0.shape).round()
+
+            for *xyxy, conf, cls in det:
+                results.append({
+                    "xmin": float(xyxy[0]),
+                    "ymin": float(xyxy[1]),
+                    "xmax": float(xyxy[2]),
+                    "ymax": float(xyxy[3]),
+                    "confidence": float(conf),
+                    "class_id": int(cls),
+                    "class_name": names[int(cls)]
+                })
+
+    return jsonify({"detections": results})
 
 
 if __name__ == "__main__":
-    import os
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
