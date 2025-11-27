@@ -1,0 +1,18 @@
+# yolov5/data/my_data.yaml
+# YOLOv5 dataset configuration for Rice Leaf Disease Detection (OryzaCare Project)
+
+train: ./datasets/my_dataset/images/train
+val: ./datasets/my_dataset/images/val
+test: ./datasets/my_dataset/images/test
+
+nc: 9  # number of classes
+names:
+  - bacterial_leaf_blight
+  - brown_spot
+  - false_smut
+  - healthy_rice_leaves
+  - leaf_scald
+  - leaf_smut
+  - rice_blast
+  - sheath_blight
+  - tungro
