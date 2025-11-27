@@ -1,9 +1,14 @@
 flask
 flask-cors
 torch
+torchvision
 opencv-python-headless
 numpy
-pandas
 pillow
+tqdm
+PyYAML
 requests
+seaborn
+scipy
+pandas
 gunicorn
